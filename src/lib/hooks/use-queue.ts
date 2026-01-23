@@ -9,7 +9,7 @@ export type QueueEmployee = {
   employee: Employee;
   clockIn: ClockInWithEmployee;
   completedTurns: number;
-  halfTurnCredits: number;
+  halfTurnCredits: number; // 0 or 0.5 for pending half-turn
   isInProgress: boolean;
   currentTurn?: TurnWithDetails;
 };
@@ -19,10 +19,13 @@ export function useQueue(
   turns: TurnWithDetails[]
 ) {
   const queue = useMemo(() => {
+    // Only use active clock-ins for the queue
+    const activeClockIns = clockIns.filter((ci) => ci.isActive);
+
     // Build queue from clocked-in employees
     const queueMap = new Map<string, QueueEmployee>();
 
-    clockIns.forEach((clockIn) => {
+    activeClockIns.forEach((clockIn) => {
       queueMap.set(clockIn.employee_id, {
         employee: clockIn.employee,
         clockIn,
@@ -33,15 +36,36 @@ export function useQueue(
       });
     });
 
+    // Track which half-turns are paired
+    const pairedHalfTurnIds = new Set<string>();
+    turns.forEach((turn) => {
+      if (turn.paired_with_turn_id) {
+        pairedHalfTurnIds.add(turn.paired_with_turn_id);
+      }
+    });
+
     // Process turns to calculate credits and status
     turns.forEach((turn) => {
       const queueItem = queueMap.get(turn.employee_id);
       if (!queueItem) return;
 
       if (turn.status === "completed") {
-        if (turn.is_half_turn) {
-          queueItem.halfTurnCredits += 0.5;
+        if (turn.paired_with_turn_id) {
+          // This is the pairing turn - it completes a half-turn to make a full turn
+          // The half-turn itself should have already been counted, so add 0.5 to make it 1
+          queueItem.completedTurns += 1;
+          // Remove the 0.5 credit from the half-turn
+          queueItem.halfTurnCredits = 0;
+        } else if (turn.is_half_turn) {
+          if (pairedHalfTurnIds.has(turn.id)) {
+            // This half-turn has been paired - don't count it separately
+            // The pairing turn will add 1 full turn
+          } else {
+            // Unpaired half-turn - counts as 0.5
+            queueItem.halfTurnCredits = 0.5;
+          }
         } else {
+          // Regular full turn
           queueItem.completedTurns += 1;
         }
       } else if (turn.status === "in_progress") {
@@ -50,24 +74,17 @@ export function useQueue(
       }
     });
 
-    // Convert half turn credits to full turns
-    queueMap.forEach((item) => {
-      const fullTurnsFromHalf = Math.floor(item.halfTurnCredits);
-      item.completedTurns += fullTurnsFromHalf;
-      item.halfTurnCredits = item.halfTurnCredits - fullTurnsFromHalf;
-    });
-
-    // Sort by: completed turns (ascending), then clock-in time (ascending)
+    // Sort by: completed turns + half credits (ascending), then position (ascending)
     const sorted = Array.from(queueMap.values()).sort((a, b) => {
-      // First by completed turns
-      if (a.completedTurns !== b.completedTurns) {
-        return a.completedTurns - b.completedTurns;
+      const aTotal = a.completedTurns + a.halfTurnCredits;
+      const bTotal = b.completedTurns + b.halfTurnCredits;
+
+      // First by total turns
+      if (aTotal !== bTotal) {
+        return aTotal - bTotal;
       }
-      // Then by clock-in time
-      return (
-        new Date(a.clockIn.clock_in_time).getTime() -
-        new Date(b.clockIn.clock_in_time).getTime()
-      );
+      // Then by position (queue order)
+      return a.clockIn.position - b.clockIn.position;
     });
 
     return sorted;

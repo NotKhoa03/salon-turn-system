@@ -6,6 +6,7 @@ import type { ClockIn, Employee } from "@/lib/types/database";
 
 export type ClockInWithEmployee = ClockIn & {
   employee: Employee;
+  isActive: boolean;
 };
 
 export function useClockIns(sessionId: string | null) {
@@ -20,6 +21,7 @@ export function useClockIns(sessionId: string | null) {
       return;
     }
 
+    // Fetch ALL clock-ins for the session (not just active ones)
     const { data } = await supabase
       .from("clock_ins")
       .select(
@@ -29,10 +31,15 @@ export function useClockIns(sessionId: string | null) {
       `
       )
       .eq("session_id", sessionId)
-      .is("clock_out_time", null)
       .order("position", { ascending: true });
 
-    setClockIns((data as ClockInWithEmployee[]) || []);
+    // Add isActive flag based on clock_out_time
+    const clockInsWithStatus = (data || []).map((ci) => ({
+      ...ci,
+      isActive: ci.clock_out_time === null,
+    })) as ClockInWithEmployee[];
+
+    setClockIns(clockInsWithStatus);
     setLoading(false);
   }, [supabase, sessionId]);
 
@@ -66,7 +73,40 @@ export function useClockIns(sessionId: string | null) {
   const clockIn = async (employeeId: string) => {
     if (!sessionId) return { error: "No session" };
 
-    // Get next position
+    // Check if employee already has a clock-in record for this session
+    const { data: existingClockIn } = await supabase
+      .from("clock_ins")
+      .select("id, clock_out_time, position")
+      .eq("session_id", sessionId)
+      .eq("employee_id", employeeId)
+      .single();
+
+    if (existingClockIn) {
+      // Re-activate: clear clock_out_time and update position
+      // Position should be after all currently active workers
+      const { data: maxActivePosition } = await supabase
+        .from("clock_ins")
+        .select("position")
+        .eq("session_id", sessionId)
+        .is("clock_out_time", null)
+        .order("position", { ascending: false })
+        .limit(1)
+        .single();
+
+      const newPosition = (maxActivePosition?.position || 0) + 1;
+
+      const { error } = await supabase
+        .from("clock_ins")
+        .update({
+          clock_out_time: null,
+          position: newPosition
+        })
+        .eq("id", existingClockIn.id);
+
+      return { error };
+    }
+
+    // New clock-in: get next position
     const { data: maxPosition } = await supabase
       .from("clock_ins")
       .select("position")
@@ -95,5 +135,15 @@ export function useClockIns(sessionId: string | null) {
     return { error };
   };
 
-  return { clockIns, loading, clockIn, clockOut, refetch: fetchClockIns };
+  // Helper to get only active clock-ins (for queue display)
+  const activeClockIns = clockIns.filter((ci) => ci.isActive);
+
+  return {
+    clockIns,           // All clock-ins (for turn grid)
+    activeClockIns,     // Only active (for queue)
+    loading,
+    clockIn,
+    clockOut,
+    refetch: fetchClockIns
+  };
 }
