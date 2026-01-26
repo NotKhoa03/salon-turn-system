@@ -192,6 +192,36 @@
   100% { background-position: -200% 0; }
 }
 
+@keyframes shimmer-sweep {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.tap-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.tap-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(247, 231, 206, 0.4) 50%,
+    transparent 100%
+  );
+  background-size: 50% 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tap-shimmer.shimmer-active::after {
+  animation: shimmer-sweep 0.4s ease-out;
+  opacity: 1;
+}
+
 @keyframes logoFloat {
   0% { opacity: 0; transform: scale(0.95); }
   40% { opacity: 1; transform: scale(1); }
@@ -463,4 +493,79 @@
   opacity: 0;
   transform: translateX(-20px);
   transition: all 0.3s ease-out;
+}
+
+/* Mobile Touch Targets */
+@media (max-width: 768px) {
+  /* Larger touch targets on mobile */
+  .service-card {
+    min-height: 60px;
+    padding: 16px;
+  }
+
+  /* Employee avatars larger on mobile */
+  .employee-avatar-mobile {
+    min-width: 56px;
+    min-height: 56px;
+  }
+
+  /* Queue items taller */
+  .queue-item-mobile {
+    min-height: 64px;
+    padding: 14px;
+  }
+
+  /* Minimum button sizes */
+  button:not([class*="icon"]) {
+    min-height: 44px;
+  }
+
+  /* Touch-friendly gaps */
+  .touch-gap {
+    gap: 12px;
+  }
+
+  /* Visual affordance - subtle shadows on tappable items */
+  .tappable-mobile {
+    box-shadow: 0 2px 8px rgba(45, 45, 45, 0.08);
+  }
+
+  /* Typography scaling for mobile */
+  body {
+    font-size: 16px; /* Prevent iOS zoom on input focus */
+  }
+
+  /* Employee names */
+  .employee-name-mobile {
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  /* Service labels */
+  .service-label-mobile {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  /* Prices - larger for quick scanning */
+  .price-mobile {
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  /* Queue text */
+  .queue-text-mobile {
+    font-size: 15px;
+  }
+}
+
+/* Extended hit areas */
+.hit-area-extended {
+  position: relative;
+}
+
+.hit-area-extended::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
 }

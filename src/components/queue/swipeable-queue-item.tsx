@@ -103,15 +103,17 @@ export function SwipeableQueueItem({
         className="absolute inset-0 flex items-center justify-end pr-4 transition-colors duration-200"
         style={{
           background: isNearThreshold
-            ? 'linear-gradient(90deg, transparent 0%, #f7e7ce 50%, #e8c4c4 100%)'
-            : 'linear-gradient(90deg, transparent 0%, #f5f0eb 50%, #f7e7ce 100%)',
+            ? 'linear-gradient(90deg, transparent 0%, #b76e79 50%, #d4a5ab 100%)'
+            : `linear-gradient(90deg, transparent 0%, rgba(247, 231, 206, ${0.3 + swipeProgress * 0.5}) 50%, rgba(183, 110, 121, ${swipeProgress * 0.3}) 100%)`,
+          transition: isSwiping ? 'none' : 'background 0.3s ease-out',
         }}
       >
         <div
           className="flex items-center gap-2 transition-all duration-200"
           style={{
             opacity: Math.min(1, swipeProgress * 1.5),
-            transform: `scale(${0.8 + swipeProgress * 0.2})`,
+            transform: `scale(${0.8 + swipeProgress * 0.4}) translateX(${(1 - swipeProgress) * 10}px)`,
+            transition: isSwiping ? 'none' : 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
         >
           <Coffee
@@ -130,7 +132,7 @@ export function SwipeableQueueItem({
       {/* Main item content */}
       <div
         ref={itemRef}
-        className={`relative flex items-center gap-3 p-3 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none ${
+        className={`relative flex items-center gap-3 p-4 sm:p-3 min-h-[56px] sm:min-h-0 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none touch-action-pan-y ${
           isSkipped
             ? 'bg-gradient-to-r from-[#f7e7ce]/40 to-[#f5f0eb]/60 border-2 border-dashed border-[#d4a574]/40'
             : isNext && !item.isInProgress
@@ -141,7 +143,7 @@ export function SwipeableQueueItem({
         }`}
         style={{
           transform: `translateX(-${swipeX}px)`,
-          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -196,7 +198,7 @@ export function SwipeableQueueItem({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-3 rounded-lg text-[#d4a574] hover:text-[#b76e79] hover:bg-[#f7e7ce]/50 text-xs font-medium"
+            className="h-9 sm:h-7 px-4 sm:px-3 rounded-lg text-[#d4a574] hover:text-[#b76e79] hover:bg-[#f7e7ce]/50 active:scale-[0.95] active:shadow-inner transition-all duration-100 text-xs font-medium touch-action-manipulation"
             onClick={() => onUnskip(item.employee.id)}
           >
             <Play className="w-3 h-3 mr-1" />
@@ -205,7 +207,7 @@ export function SwipeableQueueItem({
         ) : item.isInProgress && item.currentTurn ? (
           <Button
             size="sm"
-            className="h-7 px-2 rounded-lg bg-[#9caf88] hover:bg-[#8a9d78] text-white text-xs"
+            className="h-9 sm:h-7 px-3 sm:px-2 rounded-lg bg-[#9caf88] hover:bg-[#8a9d78] active:scale-[0.95] active:shadow-inner active:shadow-[#9caf88]/30 transition-all duration-100 text-white text-xs touch-action-manipulation"
             onClick={() => onComplete(item.currentTurn!.id)}
           >
             <Check className="w-3 h-3 mr-1" />

@@ -14,6 +14,7 @@ import {
   useAuth,
   useUndo,
   useSkip,
+  useDebounceClick,
 } from "@/lib/hooks";
 import type { Service, Employee } from "@/lib/types/database";
 import type { QueueEmployee } from "@/lib/hooks/use-queue";
@@ -77,6 +78,7 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [hasVisited]);
 
+
   // Data hooks
   const { isAdmin } = useAuth();
   const { session, loading: sessionLoading, refetch: refetchSession } = useSession(selectedDate);
@@ -125,12 +127,9 @@ export default function DashboardPage() {
   // Undo functionality
   const { recordAction } = useUndo();
 
-  const isLoading =
-    sessionLoading ||
-    employeesLoading ||
-    servicesLoading ||
-    clockInsLoading ||
-    turnsLoading;
+  // Only show splash screen for first-time visitors during welcome animation
+  // Returning visitors see dashboard immediately with loading skeletons
+  const showSplashScreen = !hasVisited && !welcomeComplete;
 
   // Track employee clock-in status
   const getEmployeeStatus = useCallback((employeeId: string) => {
@@ -252,6 +251,9 @@ export default function DashboardPage() {
     }
   };
 
+  const debouncedServiceTap = useDebounceClick(handleServiceTap, 400);
+  const debouncedClockIn = useDebounceClick(handleClockIn, 400);
+
   const handleManualAssign = async () => {
     if (!manualEmployeeId || !manualServiceId) return;
     const service = services.find((s) => s.id === manualServiceId);
@@ -310,8 +312,8 @@ export default function DashboardPage() {
     toast.success(`${emp?.full_name || 'Technician'} is back in queue`);
   };
 
-  // Welcome animation screen
-  if (isLoading || (!welcomeComplete && !hasVisited)) {
+  // Welcome animation screen - only for first-time visitors
+  if (showSplashScreen) {
     return (
       <div className="min-h-screen bg-salon-gradient flex items-center justify-center">
         <div className="text-center welcome-logo">
@@ -352,7 +354,17 @@ export default function DashboardPage() {
                   >
                     Technicians
                   </h2>
-                  <div className="flex flex-wrap gap-3">
+                  {employeesLoading ? (
+                    <div className="flex gap-4 md:gap-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex flex-col items-center gap-1 p-2">
+                          <div className="w-14 h-14 md:w-12 md:h-12 rounded-full bg-[#f5f0eb] animate-pulse" />
+                          <div className="w-10 h-3 bg-[#f5f0eb] rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                  <div className="flex flex-wrap gap-4 md:gap-3">
                     {employees.map((employee) => {
                       const status = getEmployeeStatus(employee.id);
                       const isActive = status === 'active';
@@ -372,7 +384,7 @@ export default function DashboardPage() {
                         <Tooltip key={employee.id}>
                           <TooltipTrigger asChild>
                             <button
-                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl active:scale-[0.95] active:shadow-inner active:shadow-[#b76e79]/20 transition-all touch-action-manipulation ${
                                 isCurrentlySwiping ? 'duration-0' : 'duration-200'
                               } ${
                                 isActive
@@ -382,13 +394,13 @@ export default function DashboardPage() {
                                   : 'hover:bg-[#f5f0eb]'
                               }`}
                               style={isActive ? swipeStyles : undefined}
-                              onClick={() => !isActive && handleClockIn(employee.id)}
+                              onClick={() => !isActive && debouncedClockIn(employee.id)}
                               onTouchStart={(e) => handleTouchStart(employee.id, e)}
                               onTouchMove={handleTouchMove}
                               onTouchEnd={handleTouchEnd}
                             >
                               <div
-                                className={`relative w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
+                                className={`relative w-14 h-14 md:w-12 md:h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
                                   isActive
                                     ? 'bg-gradient-to-br from-[#b76e79] to-[#d4a5ab] text-white shadow-lg'
                                     : isInactive
@@ -426,6 +438,7 @@ export default function DashboardPage() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
 
                 {/* Service Grid */}
@@ -454,18 +467,24 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {!getNextEmployee ? (
+                  {servicesLoading ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="h-20 bg-[#f5f0eb] rounded-xl animate-pulse" />
+                      ))}
+                    </div>
+                  ) : !getNextEmployee ? (
                     <div className="bg-[#f7e7ce]/30 rounded-xl p-6 text-center">
                       <p className="text-[#6b6b6b]">Clock in technicians to start</p>
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 mb-4">
                         {services.map((service, index) => (
                           <button
                             key={service.id}
-                            onClick={() => handleServiceTap(service)}
-                            className={`service-card relative p-4 rounded-xl border-2 text-left opacity-0 animate-scale-in ${
+                            onClick={() => debouncedServiceTap(service)}
+                            className={`service-card relative p-4 rounded-xl border-2 text-left opacity-0 animate-scale-in active:scale-[0.97] active:shadow-inner active:shadow-[#b76e79]/20 transition-all duration-100 ease-out touch-action-manipulation ${
                               service.is_half_turn
                                 ? 'service-card-half border-[#f7e7ce]'
                                 : 'service-card-full border-[#e8e4df] hover:border-[#b76e79]'
