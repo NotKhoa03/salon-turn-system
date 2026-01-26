@@ -356,7 +356,7 @@ export default function DashboardPage() {
                   >
                     Technicians
                   </h2>
-                  <div className="flex flex-wrap gap-3">
+                  <div className="flex flex-wrap gap-4 md:gap-3">
                     {employees.map((employee) => {
                       const status = getEmployeeStatus(employee.id);
                       const isActive = status === 'active';
@@ -392,7 +392,7 @@ export default function DashboardPage() {
                               onTouchEnd={handleTouchEnd}
                             >
                               <div
-                                className={`relative w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
+                                className={`relative w-14 h-14 md:w-12 md:h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
                                   isActive
                                     ? 'bg-gradient-to-br from-[#b76e79] to-[#d4a5ab] text-white shadow-lg'
                                     : isInactive
