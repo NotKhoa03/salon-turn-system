@@ -192,6 +192,36 @@
   100% { background-position: -200% 0; }
 }
 
+@keyframes shimmer-sweep {
+  0% { background-position: -100% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.tap-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.tap-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    120deg,
+    transparent 0%,
+    rgba(247, 231, 206, 0.4) 50%,
+    transparent 100%
+  );
+  background-size: 50% 100%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.tap-shimmer.shimmer-active::after {
+  animation: shimmer-sweep 0.4s ease-out;
+  opacity: 1;
+}
+
 @keyframes logoFloat {
   0% { opacity: 0; transform: scale(0.95); }
   40% { opacity: 1; transform: scale(1); }
