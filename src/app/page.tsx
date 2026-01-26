@@ -78,6 +78,7 @@ export default function DashboardPage() {
     return () => clearTimeout(timer);
   }, [hasVisited]);
 
+
   // Data hooks
   const { isAdmin } = useAuth();
   const { session, loading: sessionLoading, refetch: refetchSession } = useSession(selectedDate);
@@ -126,12 +127,9 @@ export default function DashboardPage() {
   // Undo functionality
   const { recordAction } = useUndo();
 
-  const isLoading =
-    sessionLoading ||
-    employeesLoading ||
-    servicesLoading ||
-    clockInsLoading ||
-    turnsLoading;
+  // Only show splash screen for first-time visitors during welcome animation
+  // Returning visitors see dashboard immediately with loading skeletons
+  const showSplashScreen = !hasVisited && !welcomeComplete;
 
   // Track employee clock-in status
   const getEmployeeStatus = useCallback((employeeId: string) => {
@@ -314,8 +312,8 @@ export default function DashboardPage() {
     toast.success(`${emp?.full_name || 'Technician'} is back in queue`);
   };
 
-  // Welcome animation screen
-  if (isLoading || (!welcomeComplete && !hasVisited)) {
+  // Welcome animation screen - only for first-time visitors
+  if (showSplashScreen) {
     return (
       <div className="min-h-screen bg-salon-gradient flex items-center justify-center">
         <div className="text-center welcome-logo">
@@ -356,6 +354,16 @@ export default function DashboardPage() {
                   >
                     Technicians
                   </h2>
+                  {employeesLoading ? (
+                    <div className="flex gap-4 md:gap-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex flex-col items-center gap-1 p-2">
+                          <div className="w-14 h-14 md:w-12 md:h-12 rounded-full bg-[#f5f0eb] animate-pulse" />
+                          <div className="w-10 h-3 bg-[#f5f0eb] rounded animate-pulse" />
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
                   <div className="flex flex-wrap gap-4 md:gap-3">
                     {employees.map((employee) => {
                       const status = getEmployeeStatus(employee.id);
@@ -430,6 +438,7 @@ export default function DashboardPage() {
                       );
                     })}
                   </div>
+                  )}
                 </div>
 
                 {/* Service Grid */}
@@ -458,7 +467,13 @@ export default function DashboardPage() {
                     </div>
                   </div>
 
-                  {!getNextEmployee ? (
+                  {servicesLoading ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                      {[1, 2, 3, 4, 5, 6].map((i) => (
+                        <div key={i} className="h-20 bg-[#f5f0eb] rounded-xl animate-pulse" />
+                      ))}
+                    </div>
+                  ) : !getNextEmployee ? (
                     <div className="bg-[#f7e7ce]/30 rounded-xl p-6 text-center">
                       <p className="text-[#6b6b6b]">Clock in technicians to start</p>
                     </div>
