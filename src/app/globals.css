@@ -494,3 +494,50 @@
   transform: translateX(-20px);
   transition: all 0.3s ease-out;
 }
+
+/* Mobile Touch Targets */
+@media (max-width: 768px) {
+  /* Larger touch targets on mobile */
+  .service-card {
+    min-height: 60px;
+    padding: 16px;
+  }
+
+  /* Employee avatars larger on mobile */
+  .employee-avatar-mobile {
+    min-width: 56px;
+    min-height: 56px;
+  }
+
+  /* Queue items taller */
+  .queue-item-mobile {
+    min-height: 64px;
+    padding: 14px;
+  }
+
+  /* Minimum button sizes */
+  button:not([class*="icon"]) {
+    min-height: 44px;
+  }
+
+  /* Touch-friendly gaps */
+  .touch-gap {
+    gap: 12px;
+  }
+
+  /* Visual affordance - subtle shadows on tappable items */
+  .tappable-mobile {
+    box-shadow: 0 2px 8px rgba(45, 45, 45, 0.08);
+  }
+}
+
+/* Extended hit areas */
+.hit-area-extended {
+  position: relative;
+}
+
+.hit-area-extended::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
