@@ -132,7 +132,7 @@ export function SwipeableQueueItem({
       {/* Main item content */}
       <div
         ref={itemRef}
-        className={`relative flex items-center gap-3 p-3 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none ${
+        className={`relative flex items-center gap-3 p-4 sm:p-3 min-h-[56px] sm:min-h-0 rounded-xl transition-all cursor-grab active:cursor-grabbing select-none touch-action-pan-y ${
           isSkipped
             ? 'bg-gradient-to-r from-[#f7e7ce]/40 to-[#f5f0eb]/60 border-2 border-dashed border-[#d4a574]/40'
             : isNext && !item.isInProgress
