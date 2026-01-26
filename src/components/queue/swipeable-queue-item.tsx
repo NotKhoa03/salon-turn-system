@@ -198,7 +198,7 @@ export function SwipeableQueueItem({
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-3 rounded-lg text-[#d4a574] hover:text-[#b76e79] hover:bg-[#f7e7ce]/50 text-xs font-medium"
+            className="h-9 sm:h-7 px-4 sm:px-3 rounded-lg text-[#d4a574] hover:text-[#b76e79] hover:bg-[#f7e7ce]/50 active:scale-[0.95] active:shadow-inner transition-all duration-100 text-xs font-medium touch-action-manipulation"
             onClick={() => onUnskip(item.employee.id)}
           >
             <Play className="w-3 h-3 mr-1" />
@@ -207,7 +207,7 @@ export function SwipeableQueueItem({
         ) : item.isInProgress && item.currentTurn ? (
           <Button
             size="sm"
-            className="h-7 px-2 rounded-lg bg-[#9caf88] hover:bg-[#8a9d78] text-white text-xs"
+            className="h-9 sm:h-7 px-3 sm:px-2 rounded-lg bg-[#9caf88] hover:bg-[#8a9d78] active:scale-[0.95] active:shadow-inner active:shadow-[#9caf88]/30 transition-all duration-100 text-white text-xs touch-action-manipulation"
             onClick={() => onComplete(item.currentTurn!.id)}
           >
             <Check className="w-3 h-3 mr-1" />
