@@ -94,7 +94,8 @@ export default function EmployeesPage() {
   };
 
   const handleToggleActive = async (employee: Employee) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("employees")
       .update({ is_active: !employee.is_active })
       .eq("id", employee.id);

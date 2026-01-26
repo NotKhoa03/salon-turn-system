@@ -28,7 +28,8 @@ export function useSession(date: Date) {
     }
 
     // Create new session for today
-    const { data: newSession, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: newSession, error } = await (supabase as any)
       .from("daily_sessions")
       .insert({ date: dateString })
       .select()

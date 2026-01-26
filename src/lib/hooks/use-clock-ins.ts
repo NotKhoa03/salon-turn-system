@@ -46,7 +46,7 @@ export function useClockIns(sessionId: string | null) {
       .order("position", { ascending: true });
 
     // Add isActive flag based on clock_out_time
-    const clockInsWithStatus = (data || []).map((ci) => ({
+    const clockInsWithStatus = (data || []).map((ci: Record<string, unknown>) => ({
       ...ci,
       isActive: ci.clock_out_time === null,
     })) as ClockInWithEmployee[];
@@ -86,29 +86,32 @@ export function useClockIns(sessionId: string | null) {
     if (!sessionId) return { error: "No session", clockInId: null, wasReactivation: false, previousClockOutTime: null };
 
     // Check if employee already has a clock-in record for this session
-    const { data: existingClockIn } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existingClockIn } = await (supabase as any)
       .from("clock_ins")
       .select("id, clock_out_time, position")
       .eq("session_id", sessionId)
       .eq("employee_id", employeeId)
-      .single();
+      .single() as { data: { id: string; clock_out_time: string | null; position: number } | null };
 
     if (existingClockIn) {
       // Re-activate: clear clock_out_time and update position
       // Position should be after all currently active workers
-      const { data: maxActivePosition } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: maxActivePosition } = await (supabase as any)
         .from("clock_ins")
         .select("position")
         .eq("session_id", sessionId)
         .is("clock_out_time", null)
         .order("position", { ascending: false })
         .limit(1)
-        .single();
+        .single() as { data: { position: number } | null };
 
       const newPosition = (maxActivePosition?.position || 0) + 1;
       const previousClockOutTime = existingClockIn.clock_out_time;
 
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("clock_ins")
         .update({
           clock_out_time: null,
@@ -125,17 +128,19 @@ export function useClockIns(sessionId: string | null) {
     }
 
     // New clock-in: get next position
-    const { data: maxPosition } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: maxPosition } = await (supabase as any)
       .from("clock_ins")
       .select("position")
       .eq("session_id", sessionId)
       .order("position", { ascending: false })
       .limit(1)
-      .single();
+      .single() as { data: { position: number } | null };
 
     const nextPosition = (maxPosition?.position || 0) + 1;
 
-    const { data, error } = await supabase.from("clock_ins").insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).from("clock_ins").insert({
       session_id: sessionId,
       employee_id: employeeId,
       position: nextPosition,
@@ -150,7 +155,8 @@ export function useClockIns(sessionId: string | null) {
   };
 
   const clockOut = async (clockInId: string) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("clock_ins")
       .update({ clock_out_time: new Date().toISOString() })
       .eq("id", clockInId);

@@ -64,7 +64,8 @@ export default function UsersPage() {
 
     if (editingUser) {
       // Update existing user's profile
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("profiles")
         .update({
           full_name: formData.full_name,
@@ -103,7 +104,8 @@ export default function UsersPage() {
   };
 
   const handleToggleActive = async (user: Profile) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("profiles")
       .update({ is_active: !user.is_active })
       .eq("id", user.id);

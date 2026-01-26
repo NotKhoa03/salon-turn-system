@@ -52,12 +52,12 @@ export function useTurns(sessionId: string | null) {
 
     // Build a map of turns by ID for pairing lookup
     const turnsById = new Map<string, TurnWithDetails>();
-    (data || []).forEach((turn) => {
-      turnsById.set(turn.id, turn as TurnWithDetails);
+    (data || []).forEach((turn: Record<string, unknown>) => {
+      turnsById.set(turn.id as string, turn as TurnWithDetails);
     });
 
     // Link paired turns
-    const turnsWithPairing = (data || []).map((turn) => {
+    const turnsWithPairing = (data || []).map((turn: Record<string, unknown>) => {
       const t = turn as TurnWithDetails;
       if (t.paired_with_turn_id) {
         t.pairedTurn = turnsById.get(t.paired_with_turn_id) || null;
@@ -104,7 +104,8 @@ export function useTurns(sessionId: string | null) {
     if (!sessionId) return { error: "No session", turnId: null };
 
     // Check if employee has a completed half-turn that hasn't been paired yet
-    const { data: pendingHalfTurn } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: pendingHalfTurn } = await (supabase as any)
       .from("turns")
       .select("id, turn_number")
       .eq("session_id", sessionId)
@@ -114,17 +115,18 @@ export function useTurns(sessionId: string | null) {
       .is("paired_with_turn_id", null)
       .order("turn_number", { ascending: false })
       .limit(1)
-      .single();
+      .single() as { data: { id: string; turn_number: number } | null };
 
     // Also check there's no turn already paired WITH this half-turn
     let actualPendingHalfTurn = pendingHalfTurn;
     if (pendingHalfTurn) {
-      const { data: existingPair } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: existingPair } = await (supabase as any)
         .from("turns")
         .select("id")
         .eq("paired_with_turn_id", pendingHalfTurn.id)
         .limit(1)
-        .single();
+        .single() as { data: { id: string } | null };
 
       if (existingPair) {
         // Already paired, so this isn't actually pending
@@ -141,19 +143,21 @@ export function useTurns(sessionId: string | null) {
       pairedWithTurnId = actualPendingHalfTurn.id;
     } else {
       // Get next turn number for this employee
-      const { data: employeeTurns } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: employeeTurns } = await (supabase as any)
         .from("turns")
         .select("turn_number")
         .eq("session_id", sessionId)
         .eq("employee_id", employeeId)
         .order("turn_number", { ascending: false })
         .limit(1)
-        .single();
+        .single() as { data: { turn_number: number } | null };
 
       turnNumber = (employeeTurns?.turn_number || 0) + 1;
     }
 
-    const { data, error } = await supabase.from("turns").insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any).from("turns").insert({
       session_id: sessionId,
       employee_id: employeeId,
       service_id: serviceId,
@@ -167,7 +171,8 @@ export function useTurns(sessionId: string | null) {
   };
 
   const completeTurn = async (turnId: string) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("turns")
       .update({
         status: "completed",

@@ -16,7 +16,8 @@ export function useClearDay(sessionId: string | null) {
 
     try {
       // 1. Delete all turns for this session
-      const { error: turnsError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: turnsError } = await (supabase as any)
         .from("turns")
         .delete()
         .eq("session_id", sessionId);
@@ -27,7 +28,8 @@ export function useClearDay(sessionId: string | null) {
       }
 
       // 2. Delete all clock-ins for this session
-      const { error: clockInsError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: clockInsError } = await (supabase as any)
         .from("clock_ins")
         .delete()
         .eq("session_id", sessionId);

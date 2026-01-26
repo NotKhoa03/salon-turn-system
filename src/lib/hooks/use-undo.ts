@@ -80,7 +80,8 @@ export function useUndo() {
   // Undo turn assignment (delete the turn)
   const undoAssignTurn = useCallback(
     async (turnId: string) => {
-      const { error } = await supabase.from("turns").delete().eq("id", turnId);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("turns").delete().eq("id", turnId);
 
       if (error) {
         toast.error("Failed to undo turn assignment");
@@ -95,7 +96,8 @@ export function useUndo() {
   // Undo turn completion (set back to in_progress)
   const undoCompleteTurn = useCallback(
     async (turnId: string) => {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("turns")
         .update({
           status: "in_progress",
@@ -118,7 +120,8 @@ export function useUndo() {
     async (clockInId: string, wasReactivation: boolean, previousClockOutTime: string | null) => {
       if (wasReactivation && previousClockOutTime) {
         // If it was a reactivation, restore the previous clock_out_time
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("clock_ins")
           .update({ clock_out_time: previousClockOutTime })
           .eq("id", clockInId);
@@ -129,7 +132,8 @@ export function useUndo() {
         }
       } else {
         // If it was a new clock-in, delete the record
-        const { error } = await supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error } = await (supabase as any)
           .from("clock_ins")
           .delete()
           .eq("id", clockInId);
@@ -148,7 +152,8 @@ export function useUndo() {
   // Undo clock-out (clock back in - clear clock_out_time)
   const undoClockOut = useCallback(
     async (clockInId: string) => {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("clock_ins")
         .update({ clock_out_time: null })
         .eq("id", clockInId);

@@ -70,7 +70,8 @@ export default function ServicesPage() {
     };
 
     if (editingService) {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("services")
         .update(payload)
         .eq("id", editingService.id);
@@ -82,7 +83,8 @@ export default function ServicesPage() {
         fetchServices();
       }
     } else {
-      const { error } = await supabase.from("services").insert(payload);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("services").insert(payload);
 
       if (error) {
         toast.error("Failed to create service");
@@ -109,7 +111,8 @@ export default function ServicesPage() {
   };
 
   const handleToggleActive = async (service: Service) => {
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from("services")
       .update({ is_active: !service.is_active })
       .eq("id", service.id);

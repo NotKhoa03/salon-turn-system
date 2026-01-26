@@ -53,11 +53,12 @@ export async function updateSession(request: NextRequest) {
 
   // Check admin access
   if (user && isAdminPage) {
-    const { data: profile } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profile } = await (supabase as any)
       .from("profiles")
       .select("role")
       .eq("id", user.id)
-      .single();
+      .single() as { data: { role: string } | null };
 
     if (profile?.role !== "admin") {
       const url = request.nextUrl.clone();
