@@ -143,7 +143,7 @@ export function SwipeableQueueItem({
         }`}
         style={{
           transform: `translateX(-${swipeX}px)`,
-          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+          transition: isSwiping ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
         }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
