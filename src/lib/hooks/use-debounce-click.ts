@@ -4,7 +4,8 @@ import { useCallback, useRef } from 'react';
  * Wraps a click handler to prevent double-clicks/double-taps.
  * Ignores clicks within the debounce period after the last click.
  */
-export function useDebounceClick<T extends (...args: unknown[]) => unknown>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function useDebounceClick<T extends (...args: any[]) => any>(
   handler: T,
   delay: number = 400
 ): T {

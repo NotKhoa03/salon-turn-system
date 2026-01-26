@@ -14,6 +14,7 @@ import {
   useAuth,
   useUndo,
   useSkip,
+  useDebounceClick,
 } from "@/lib/hooks";
 import type { Service, Employee } from "@/lib/types/database";
 import type { QueueEmployee } from "@/lib/hooks/use-queue";
@@ -252,6 +253,8 @@ export default function DashboardPage() {
     }
   };
 
+  const debouncedServiceTap = useDebounceClick(handleServiceTap, 400);
+
   const handleManualAssign = async () => {
     if (!manualEmployeeId || !manualServiceId) return;
     const service = services.find((s) => s.id === manualServiceId);
@@ -464,8 +467,8 @@ export default function DashboardPage() {
                         {services.map((service, index) => (
                           <button
                             key={service.id}
-                            onClick={() => handleServiceTap(service)}
-                            className={`service-card relative p-4 rounded-xl border-2 text-left opacity-0 animate-scale-in ${
+                            onClick={() => debouncedServiceTap(service)}
+                            className={`service-card relative p-4 rounded-xl border-2 text-left opacity-0 animate-scale-in active:scale-[0.97] active:shadow-inner active:shadow-[#b76e79]/20 transition-all duration-100 ease-out touch-action-manipulation ${
                               service.is_half_turn
                                 ? 'service-card-half border-[#f7e7ce]'
                                 : 'service-card-full border-[#e8e4df] hover:border-[#b76e79]'
