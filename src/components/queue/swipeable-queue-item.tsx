@@ -103,15 +103,17 @@ export function SwipeableQueueItem({
         className="absolute inset-0 flex items-center justify-end pr-4 transition-colors duration-200"
         style={{
           background: isNearThreshold
-            ? 'linear-gradient(90deg, transparent 0%, #f7e7ce 50%, #e8c4c4 100%)'
-            : 'linear-gradient(90deg, transparent 0%, #f5f0eb 50%, #f7e7ce 100%)',
+            ? 'linear-gradient(90deg, transparent 0%, #b76e79 50%, #d4a5ab 100%)'
+            : `linear-gradient(90deg, transparent 0%, rgba(247, 231, 206, ${0.3 + swipeProgress * 0.5}) 50%, rgba(183, 110, 121, ${swipeProgress * 0.3}) 100%)`,
+          transition: isSwiping ? 'none' : 'background 0.3s ease-out',
         }}
       >
         <div
           className="flex items-center gap-2 transition-all duration-200"
           style={{
             opacity: Math.min(1, swipeProgress * 1.5),
-            transform: `scale(${0.8 + swipeProgress * 0.2})`,
+            transform: `scale(${0.8 + swipeProgress * 0.4}) translateX(${(1 - swipeProgress) * 10}px)`,
+            transition: isSwiping ? 'none' : 'all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
           }}
         >
           <Coffee
