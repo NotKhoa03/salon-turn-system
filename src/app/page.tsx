@@ -254,6 +254,7 @@ export default function DashboardPage() {
   };
 
   const debouncedServiceTap = useDebounceClick(handleServiceTap, 400);
+  const debouncedClockIn = useDebounceClick(handleClockIn, 400);
 
   const handleManualAssign = async () => {
     if (!manualEmployeeId || !manualServiceId) return;
@@ -375,7 +376,7 @@ export default function DashboardPage() {
                         <Tooltip key={employee.id}>
                           <TooltipTrigger asChild>
                             <button
-                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl active:scale-[0.95] active:shadow-inner active:shadow-[#b76e79]/20 transition-all touch-action-manipulation ${
                                 isCurrentlySwiping ? 'duration-0' : 'duration-200'
                               } ${
                                 isActive
@@ -385,7 +386,7 @@ export default function DashboardPage() {
                                   : 'hover:bg-[#f5f0eb]'
                               }`}
                               style={isActive ? swipeStyles : undefined}
-                              onClick={() => !isActive && handleClockIn(employee.id)}
+                              onClick={() => !isActive && debouncedClockIn(employee.id)}
                               onTouchStart={(e) => handleTouchStart(employee.id, e)}
                               onTouchMove={handleTouchMove}
                               onTouchEnd={handleTouchEnd}
