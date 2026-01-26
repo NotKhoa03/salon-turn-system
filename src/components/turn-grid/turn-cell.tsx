@@ -19,6 +19,17 @@ import type { TurnWithDetails } from "@/lib/hooks/use-turns";
 import { Check, Clock, Slash } from "lucide-react";
 import { format } from "date-fns";
 
+const COLOR_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+  green: { bg: "bg-green-100", border: "border-green-400", text: "text-green-600" },
+  blue: { bg: "bg-blue-100", border: "border-blue-400", text: "text-blue-600" },
+  purple: { bg: "bg-purple-100", border: "border-purple-400", text: "text-purple-600" },
+  pink: { bg: "bg-pink-100", border: "border-pink-400", text: "text-pink-600" },
+  orange: { bg: "bg-orange-100", border: "border-orange-400", text: "text-orange-600" },
+  red: { bg: "bg-red-100", border: "border-red-400", text: "text-red-600" },
+  yellow: { bg: "bg-yellow-100", border: "border-yellow-400", text: "text-yellow-600" },
+  teal: { bg: "bg-teal-100", border: "border-teal-400", text: "text-teal-600" },
+};
+
 interface TurnCellProps {
   turn?: TurnWithDetails;
   onComplete?: (turnId: string) => void;
@@ -35,6 +46,10 @@ export function TurnCell({ turn, onComplete }: TurnCellProps) {
   const isCompleted = turn.status === "completed";
   const isHalfTurn = turn.is_half_turn;
 
+  // Get color from service, fallback to green
+  const serviceColor = (turn.service as { color?: string }).color || "green";
+  const colorStyle = COLOR_STYLES[serviceColor] || COLOR_STYLES.green;
+
   // Cell content based on status
   const getCellContent = () => {
     if (isInProgress) {
@@ -47,17 +62,17 @@ export function TurnCell({ turn, onComplete }: TurnCellProps) {
 
     if (isCompleted && isHalfTurn) {
       return (
-        <div className="relative flex items-center justify-center h-full bg-green-100 border-2 border-green-400 rounded-md">
-          <Check className="h-5 w-5 text-green-600" />
-          <Slash className="h-3 w-3 text-green-600 absolute top-0.5 right-0.5" />
+        <div className={`relative flex items-center justify-center h-full ${colorStyle.bg} border-2 ${colorStyle.border} rounded-md`}>
+          <Check className={`h-5 w-5 ${colorStyle.text}`} />
+          <Slash className={`h-3 w-3 ${colorStyle.text} absolute top-0.5 right-0.5`} />
         </div>
       );
     }
 
     if (isCompleted) {
       return (
-        <div className="flex items-center justify-center h-full bg-green-100 border-2 border-green-400 rounded-md">
-          <Check className="h-5 w-5 text-green-600" />
+        <div className={`flex items-center justify-center h-full ${colorStyle.bg} border-2 ${colorStyle.border} rounded-md`}>
+          <Check className={`h-5 w-5 ${colorStyle.text}`} />
         </div>
       );
     }

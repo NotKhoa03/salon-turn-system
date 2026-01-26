@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { TopNav } from "@/components/layout/top-nav";
 import { TurnGrid } from "@/components/turn-grid/turn-grid";
 import { Toaster, toast } from "sonner";
@@ -11,6 +11,9 @@ import {
   useClockIns,
   useTurns,
   useQueue,
+  useAuth,
+  useUndo,
+  useSkip,
 } from "@/lib/hooks";
 import type { Service, Employee } from "@/lib/types/database";
 import type { QueueEmployee } from "@/lib/hooks/use-queue";
@@ -42,6 +45,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ClearDayButton } from "@/components/admin-controls";
+import { SwipeableQueueItem } from "@/components/queue";
 
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -50,8 +55,15 @@ export default function DashboardPage() {
   const [manualServiceId, setManualServiceId] = useState<string>("");
   const [welcomeComplete, setWelcomeComplete] = useState(false);
   const [hasVisited, setHasVisited] = useState(true);
-  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const [longPressTarget, setLongPressTarget] = useState<string | null>(null);
+  // Swipe gesture state for clock out
+  const [swipeState, setSwipeState] = useState<{
+    employeeId: string | null;
+    startY: number;
+    currentY: number;
+    isSwiping: boolean;
+  }>({ employeeId: null, startY: 0, currentY: 0, isSwiping: false });
+
+  const SWIPE_THRESHOLD = 60; // pixels needed for a successful swipe-up
 
   // Check for previous visit
   useEffect(() => {
@@ -66,7 +78,8 @@ export default function DashboardPage() {
   }, [hasVisited]);
 
   // Data hooks
-  const { session, loading: sessionLoading } = useSession(selectedDate);
+  const { isAdmin } = useAuth();
+  const { session, loading: sessionLoading, refetch: refetchSession } = useSession(selectedDate);
   const { employees, loading: employeesLoading } = useEmployees();
   const { services, loading: servicesLoading } = useServices();
   const {
@@ -83,7 +96,34 @@ export default function DashboardPage() {
   } = useTurns(session?.id || null);
 
   // Queue logic
-  const { queue, getNextEmployee } = useQueue(clockIns, turns);
+  const { queue, getNextEmployee: rawNextEmployee } = useQueue(clockIns, turns);
+
+  // Skip functionality
+  const { skippedEmployees, skipEmployee, unskipEmployee, isSkipped } = useSkip();
+
+  // Get next employee excluding skipped ones
+  const getNextEmployee = useMemo(() => {
+    return queue.find((q) => !q.isInProgress && !isSkipped(q.employee.id)) || null;
+  }, [queue, isSkipped]);
+
+  // Sort queue to show skipped employees at the bottom of their tier
+  const sortedQueue = useMemo(() => {
+    return [...queue].sort((a, b) => {
+      const aSkipped = isSkipped(a.employee.id);
+      const bSkipped = isSkipped(b.employee.id);
+
+      // If skip status is different, non-skipped comes first
+      if (aSkipped !== bSkipped) {
+        return aSkipped ? 1 : -1;
+      }
+
+      // Otherwise maintain original order
+      return 0;
+    });
+  }, [queue, isSkipped]);
+
+  // Undo functionality
+  const { recordAction } = useUndo();
 
   const isLoading =
     sessionLoading ||
@@ -104,12 +144,17 @@ export default function DashboardPage() {
   const handleClockIn = async (employeeId: string) => {
     const emp = employees.find((e) => e.id === employeeId);
     const status = getEmployeeStatus(employeeId);
-    const { error } = await clockIn(employeeId);
-    if (error) {
+    const result = await clockIn(employeeId);
+    if (result.error) {
       toast.error("Failed to clock in");
-    } else {
+    } else if (result.clockInId) {
       const message = status === 'inactive' ? `${emp?.full_name} clocked back in` : `${emp?.full_name} clocked in`;
-      toast.success(message);
+      recordAction("clock_in", message, {
+        clockInId: result.clockInId,
+        wasReactivation: result.wasReactivation,
+        previousClockOutTime: result.previousClockOutTime,
+        employeeName: emp?.full_name,
+      });
     }
   };
 
@@ -118,33 +163,70 @@ export default function DashboardPage() {
     const emp = employees.find((e) => e.id === employeeId);
     if (!clockInRecord) return;
 
-    const { error } = await clockOut(clockInRecord.id);
-    if (error) {
+    const result = await clockOut(clockInRecord.id);
+    if (result.error) {
       toast.error("Failed to clock out");
     } else {
-      toast.success(`${emp?.full_name} clocked out`);
+      recordAction("clock_out", `${emp?.full_name} clocked out`, {
+        clockInId: result.clockInId,
+        employeeName: emp?.full_name,
+      });
     }
   };
 
-  // Long press handlers for clock out
-  const handleLongPressStart = useCallback((employeeId: string) => {
+  // Swipe gesture handlers for clock out
+  const handleTouchStart = useCallback((employeeId: string, e: React.TouchEvent) => {
     const status = getEmployeeStatus(employeeId);
     if (status !== 'active') return;
 
-    setLongPressTarget(employeeId);
-    longPressTimerRef.current = setTimeout(() => {
-      handleClockOut(employeeId);
-      setLongPressTarget(null);
-    }, 800);
+    const touch = e.touches[0];
+    setSwipeState({
+      employeeId,
+      startY: touch.clientY,
+      currentY: touch.clientY,
+      isSwiping: true,
+    });
   }, [getEmployeeStatus]);
 
-  const handleLongPressEnd = useCallback(() => {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!swipeState.isSwiping || !swipeState.employeeId) return;
+
+    const touch = e.touches[0];
+    setSwipeState(prev => ({
+      ...prev,
+      currentY: touch.clientY,
+    }));
+  }, [swipeState.isSwiping, swipeState.employeeId]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (!swipeState.isSwiping || !swipeState.employeeId) return;
+
+    const swipeDistance = swipeState.startY - swipeState.currentY;
+
+    // If swiped up past threshold, clock out
+    if (swipeDistance >= SWIPE_THRESHOLD) {
+      handleClockOut(swipeState.employeeId);
     }
-    setLongPressTarget(null);
-  }, []);
+
+    // Reset swipe state
+    setSwipeState({ employeeId: null, startY: 0, currentY: 0, isSwiping: false });
+  }, [swipeState]);
+
+  // Calculate swipe visual feedback
+  const getSwipeTransform = (employeeId: string) => {
+    if (swipeState.employeeId !== employeeId || !swipeState.isSwiping) {
+      return { transform: 'translateY(0)', opacity: 1 };
+    }
+
+    const swipeDistance = Math.max(0, swipeState.startY - swipeState.currentY);
+    const clampedDistance = Math.min(swipeDistance, 80); // Max visual offset
+    const opacity = 1 - (clampedDistance / 120); // Fade as swipe progresses
+
+    return {
+      transform: `translateY(-${clampedDistance}px)`,
+      opacity: Math.max(0.3, opacity),
+    };
+  };
 
   // Service tap - assign to next employee
   const handleServiceTap = async (service: Service) => {
@@ -153,17 +235,20 @@ export default function DashboardPage() {
       return;
     }
 
-    const { error } = await assignTurn(
+    const employeeName = getNextEmployee.employee.full_name;
+    const result = await assignTurn(
       getNextEmployee.employee.id,
       service.id,
       service.is_half_turn
     );
-    if (error) {
+    if (result.error) {
       toast.error("Failed to assign service");
-    } else {
-      toast.success(
-        `${service.name} assigned to ${getNextEmployee.employee.full_name}`
-      );
+    } else if (result.turnId) {
+      recordAction("assign_turn", `${service.name} assigned to ${employeeName}`, {
+        turnId: result.turnId,
+        serviceName: service.name,
+        employeeName,
+      });
     }
   };
 
@@ -174,15 +259,20 @@ export default function DashboardPage() {
 
     if (!service || !employee) return;
 
-    const { error } = await assignTurn(
+    const employeeName = employee.employee.full_name;
+    const result = await assignTurn(
       manualEmployeeId,
       manualServiceId,
       service.is_half_turn
     );
-    if (error) {
+    if (result.error) {
       toast.error("Failed to assign service");
-    } else {
-      toast.success(`${service.name} assigned to ${employee.employee.full_name}`);
+    } else if (result.turnId) {
+      recordAction("assign_turn", `${service.name} assigned to ${employeeName}`, {
+        turnId: result.turnId,
+        serviceName: service.name,
+        employeeName,
+      });
     }
     setManualAssignOpen(false);
     setManualEmployeeId("");
@@ -190,12 +280,34 @@ export default function DashboardPage() {
   };
 
   const handleCompleteTurn = async (turnId: string) => {
+    const turn = turns.find((t) => t.id === turnId);
     const { error } = await completeTurn(turnId);
     if (error) {
       toast.error("Failed to complete turn");
     } else {
-      toast.success("Service completed");
+      const employeeName = turn?.employee?.full_name || "Unknown";
+      const serviceName = turn?.service?.name || "Service";
+      recordAction("complete_turn", `${serviceName} completed for ${employeeName}`, {
+        turnId,
+        serviceName,
+        employeeName,
+      });
     }
+  };
+
+  const handleSkipEmployee = (employeeId: string) => {
+    const emp = employees.find((e) => e.id === employeeId);
+    skipEmployee(employeeId);
+    toast.success(`${emp?.full_name || 'Technician'} is on break`, {
+      description: "Swipe again or tap Resume to bring them back",
+      duration: 3000,
+    });
+  };
+
+  const handleUnskipEmployee = (employeeId: string) => {
+    const emp = employees.find((e) => e.id === employeeId);
+    unskipEmployee(employeeId);
+    toast.success(`${emp?.full_name || 'Technician'} is back in queue`);
   };
 
   // Welcome animation screen
@@ -247,10 +359,11 @@ export default function DashboardPage() {
                       const isInactive = status === 'inactive';
                       const queueItem = queue.find(q => q.employee.id === employee.id);
                       const isBusy = queueItem?.isInProgress;
-                      const isLongPressing = longPressTarget === employee.id;
+                      const isCurrentlySwiping = swipeState.employeeId === employee.id && swipeState.isSwiping;
+                      const swipeStyles = getSwipeTransform(employee.id);
 
                       const tooltipText = isActive
-                        ? 'Long press to clock out'
+                        ? 'Swipe up to clock out'
                         : isInactive
                         ? 'Tap to clock back in'
                         : 'Tap to clock in';
@@ -259,19 +372,20 @@ export default function DashboardPage() {
                         <Tooltip key={employee.id}>
                           <TooltipTrigger asChild>
                             <button
-                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${
+                              className={`relative flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                                isCurrentlySwiping ? 'duration-0' : 'duration-200'
+                              } ${
                                 isActive
                                   ? 'bg-[#f7e7ce]/30'
                                   : isInactive
                                   ? 'bg-[#f5f0eb]/50'
                                   : 'hover:bg-[#f5f0eb]'
-                              } ${isLongPressing ? 'scale-95' : ''}`}
+                              }`}
+                              style={isActive ? swipeStyles : undefined}
                               onClick={() => !isActive && handleClockIn(employee.id)}
-                              onMouseDown={() => handleLongPressStart(employee.id)}
-                              onMouseUp={handleLongPressEnd}
-                              onMouseLeave={handleLongPressEnd}
-                              onTouchStart={() => handleLongPressStart(employee.id)}
-                              onTouchEnd={handleLongPressEnd}
+                              onTouchStart={(e) => handleTouchStart(employee.id, e)}
+                              onTouchMove={handleTouchMove}
+                              onTouchEnd={handleTouchEnd}
                             >
                               <div
                                 className={`relative w-12 h-12 rounded-full flex items-center justify-center text-lg font-semibold transition-all duration-300 ${
@@ -392,75 +506,75 @@ export default function DashboardPage() {
                   className="bg-white rounded-2xl shadow-salon p-5 opacity-0 animate-slide-in"
                   style={{ animationDelay: '0.3s', animationFillMode: 'forwards' }}
                 >
-                  <h2
-                    className="text-lg font-semibold text-[#2d2d2d] mb-4"
-                    style={{ fontFamily: 'var(--font-cormorant), serif' }}
-                  >
-                    Queue Order
-                  </h2>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2
+                      className="text-lg font-semibold text-[#2d2d2d]"
+                      style={{ fontFamily: 'var(--font-cormorant), serif' }}
+                    >
+                      Queue Order
+                    </h2>
+                    {sortedQueue.length > 0 && (
+                      <span className="text-xs text-[#6b6b6b] italic">
+                        swipe left to skip
+                      </span>
+                    )}
+                  </div>
 
-                  {queue.length === 0 ? (
+                  {sortedQueue.length === 0 ? (
                     <div className="text-center py-6 text-[#6b6b6b]">
                       <p className="text-sm">No technicians clocked in</p>
                     </div>
                   ) : (
                     <div className="space-y-2">
-                      {queue.map((item, index) => {
-                        const isNext = index === 0 && !item.isInProgress;
+                      {sortedQueue.map((item, index) => {
+                        const employeeIsSkipped = isSkipped(item.employee.id);
+                        // Calculate "next" based on first non-skipped, non-in-progress
+                        const isNext = !employeeIsSkipped && !item.isInProgress &&
+                          getNextEmployee?.employee.id === item.employee.id;
+
                         return (
-                          <div
+                          <SwipeableQueueItem
                             key={item.employee.id}
-                            className={`flex items-center gap-3 p-3 rounded-xl transition-all ${
-                              isNext
-                                ? 'bg-gradient-to-r from-[#b76e79]/10 to-[#e8c4c4]/10 border border-[#b76e79]/30'
-                                : item.isInProgress
-                                ? 'bg-[#f7e7ce]/30'
-                                : 'bg-[#f5f0eb]/50'
-                            }`}
-                          >
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                              isNext
-                                ? 'bg-[#b76e79] text-white'
-                                : 'bg-white text-[#6b6b6b] border border-[#e8e4df]'
-                            }`}>
-                              {index + 1}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-[#2d2d2d] text-sm flex items-center gap-2">
-                                {item.employee.full_name}
-                                {isNext && (
-                                  <span className="text-[10px] bg-[#b76e79] text-white px-1.5 py-0.5 rounded font-bold">
-                                    NEXT
-                                  </span>
-                                )}
-                              </div>
-                              <div className="text-xs text-[#6b6b6b]">
-                                {item.completedTurns} turn{item.completedTurns !== 1 ? 's' : ''}
-                                {item.halfTurnCredits > 0 && ' + ½'}
-                              </div>
-                            </div>
-                            {item.isInProgress && item.currentTurn && (
-                              <Button
-                                size="sm"
-                                className="h-7 px-2 rounded-lg bg-[#9caf88] hover:bg-[#8a9d78] text-white text-xs"
-                                onClick={() => handleCompleteTurn(item.currentTurn!.id)}
-                              >
-                                <Check className="w-3 h-3 mr-1" />
-                                Done
-                              </Button>
-                            )}
-                          </div>
+                            item={item}
+                            index={index}
+                            isNext={isNext}
+                            isSkipped={employeeIsSkipped}
+                            onComplete={handleCompleteTurn}
+                            onSkip={handleSkipEmployee}
+                            onUnskip={handleUnskipEmployee}
+                          />
                         );
                       })}
                     </div>
                   )}
                 </div>
+
+                {/* Admin Controls - Only visible to admins */}
+                {isAdmin && (
+                  <div
+                    className="bg-white rounded-2xl shadow-salon p-5 opacity-0 animate-slide-in border border-red-100"
+                    style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}
+                  >
+                    <h2
+                      className="text-lg font-semibold text-[#2d2d2d] mb-4"
+                      style={{ fontFamily: 'var(--font-cormorant), serif' }}
+                    >
+                      Admin Controls
+                    </h2>
+                    <div className="space-y-3">
+                      <p className="text-xs text-[#6b6b6b]">
+                        Reset all data for the current day. This will delete all turns and clock-ins.
+                      </p>
+                      <ClearDayButton sessionId={session?.id || null} />
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Right Column - Turn Grid */}
               <div
                 className="lg:col-span-8 opacity-0 animate-slide-in-right"
-                style={{ animationDelay: '0.4s', animationFillMode: 'forwards' }}
+                style={{ animationDelay: '0.5s', animationFillMode: 'forwards' }}
               >
                 <TurnGrid
                   clockIns={clockIns}

@@ -408,3 +408,59 @@
   border: 2px solid white;
   border-radius: 50%;
 }
+
+/* Skip/Break state animations */
+@keyframes breakPulse {
+  0%, 100% {
+    border-color: rgba(212, 165, 116, 0.4);
+    background: linear-gradient(135deg, rgba(247, 231, 206, 0.4) 0%, rgba(245, 240, 235, 0.6) 100%);
+  }
+  50% {
+    border-color: rgba(212, 165, 116, 0.6);
+    background: linear-gradient(135deg, rgba(247, 231, 206, 0.5) 0%, rgba(245, 240, 235, 0.7) 100%);
+  }
+}
+
+.queue-item-skipped {
+  animation: breakPulse 3s ease-in-out infinite;
+}
+
+/* Swipe hint animation */
+@keyframes swipeHint {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateX(-5px);
+    opacity: 1;
+  }
+}
+
+.swipe-hint {
+  animation: swipeHint 2s ease-in-out infinite;
+  animation-delay: 2s;
+}
+
+/* Queue item transitions */
+.queue-item-enter {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.queue-item-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: all 0.3s ease-out;
+}
+
+.queue-item-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.queue-item-exit-active {
+  opacity: 0;
+  transform: translateX(-20px);
+  transition: all 0.3s ease-out;
+}

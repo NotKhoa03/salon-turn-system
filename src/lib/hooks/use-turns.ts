@@ -24,6 +24,19 @@ export function useTurns(sessionId: string | null) {
       return;
     }
 
+    // First, do a quick count check to avoid heavy JOINs on empty data
+    const { count } = await supabase
+      .from("turns")
+      .select("*", { count: "exact", head: true })
+      .eq("session_id", sessionId);
+
+    // If no turns exist, skip the expensive JOIN query
+    if (count === 0) {
+      setTurns([]);
+      setLoading(false);
+      return;
+    }
+
     const { data } = await supabase
       .from("turns")
       .select(
@@ -88,7 +101,7 @@ export function useTurns(sessionId: string | null) {
     serviceId: string,
     isHalfTurn: boolean
   ) => {
-    if (!sessionId) return { error: "No session" };
+    if (!sessionId) return { error: "No session", turnId: null };
 
     // Check if employee has a completed half-turn that hasn't been paired yet
     const { data: pendingHalfTurn } = await supabase
@@ -140,7 +153,7 @@ export function useTurns(sessionId: string | null) {
       turnNumber = (employeeTurns?.turn_number || 0) + 1;
     }
 
-    const { error } = await supabase.from("turns").insert({
+    const { data, error } = await supabase.from("turns").insert({
       session_id: sessionId,
       employee_id: employeeId,
       service_id: serviceId,
@@ -148,9 +161,9 @@ export function useTurns(sessionId: string | null) {
       is_half_turn: isHalfTurn,
       status: "in_progress",
       paired_with_turn_id: pairedWithTurnId,
-    });
+    }).select("id").single();
 
-    return { error };
+    return { error, turnId: data?.id || null };
   };
 
   const completeTurn = async (turnId: string) => {

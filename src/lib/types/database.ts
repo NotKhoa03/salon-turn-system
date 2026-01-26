@@ -68,6 +68,7 @@ export interface Database {
           price: number;
           is_half_turn: boolean;
           is_active: boolean;
+          color: string;
           created_at: string;
         };
         Insert: {
@@ -76,6 +77,7 @@ export interface Database {
           price: number;
           is_half_turn?: boolean;
           is_active?: boolean;
+          color?: string;
           created_at?: string;
         };
         Update: {
@@ -84,6 +86,7 @@ export interface Database {
           price?: number;
           is_half_turn?: boolean;
           is_active?: boolean;
+          color?: string;
           created_at?: string;
         };
       };

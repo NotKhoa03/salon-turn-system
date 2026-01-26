@@ -55,7 +55,8 @@ export default function EmployeesPage() {
     };
 
     if (editingEmployee) {
-      const { error } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
         .from("employees")
         .update(payload)
         .eq("id", editingEmployee.id);
@@ -67,7 +68,8 @@ export default function EmployeesPage() {
         fetchEmployees();
       }
     } else {
-      const { error } = await supabase.from("employees").insert(payload);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from("employees").insert(payload);
 
       if (error) {
         toast.error("Failed to create employee");

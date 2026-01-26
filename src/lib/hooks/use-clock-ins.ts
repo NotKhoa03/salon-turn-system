@@ -21,6 +21,18 @@ export function useClockIns(sessionId: string | null) {
       return;
     }
 
+    // Quick count check to avoid JOIN overhead on empty data
+    const { count } = await supabase
+      .from("clock_ins")
+      .select("*", { count: "exact", head: true })
+      .eq("session_id", sessionId);
+
+    if (count === 0) {
+      setClockIns([]);
+      setLoading(false);
+      return;
+    }
+
     // Fetch ALL clock-ins for the session (not just active ones)
     const { data } = await supabase
       .from("clock_ins")
@@ -71,7 +83,7 @@ export function useClockIns(sessionId: string | null) {
   }, [supabase, sessionId, fetchClockIns]);
 
   const clockIn = async (employeeId: string) => {
-    if (!sessionId) return { error: "No session" };
+    if (!sessionId) return { error: "No session", clockInId: null, wasReactivation: false, previousClockOutTime: null };
 
     // Check if employee already has a clock-in record for this session
     const { data: existingClockIn } = await supabase
@@ -94,6 +106,7 @@ export function useClockIns(sessionId: string | null) {
         .single();
 
       const newPosition = (maxActivePosition?.position || 0) + 1;
+      const previousClockOutTime = existingClockIn.clock_out_time;
 
       const { error } = await supabase
         .from("clock_ins")
@@ -103,7 +116,12 @@ export function useClockIns(sessionId: string | null) {
         })
         .eq("id", existingClockIn.id);
 
-      return { error };
+      return {
+        error,
+        clockInId: existingClockIn.id,
+        wasReactivation: true,
+        previousClockOutTime
+      };
     }
 
     // New clock-in: get next position
@@ -117,13 +135,18 @@ export function useClockIns(sessionId: string | null) {
 
     const nextPosition = (maxPosition?.position || 0) + 1;
 
-    const { error } = await supabase.from("clock_ins").insert({
+    const { data, error } = await supabase.from("clock_ins").insert({
       session_id: sessionId,
       employee_id: employeeId,
       position: nextPosition,
-    });
+    }).select("id").single();
 
-    return { error };
+    return {
+      error,
+      clockInId: data?.id || null,
+      wasReactivation: false,
+      previousClockOutTime: null
+    };
   };
 
   const clockOut = async (clockInId: string) => {
@@ -132,7 +155,7 @@ export function useClockIns(sessionId: string | null) {
       .update({ clock_out_time: new Date().toISOString() })
       .eq("id", clockInId);
 
-    return { error };
+    return { error, clockInId };
   };
 
   // Helper to get only active clock-ins (for queue display)
