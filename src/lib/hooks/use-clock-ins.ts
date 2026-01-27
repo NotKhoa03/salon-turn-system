@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { ClockIn, Employee } from "@/lib/types/database";
+import logger from "@/lib/logger";
 
 export type ClockInWithEmployee = ClockIn & {
   employee: Employee;
@@ -21,6 +22,8 @@ export function useClockIns(sessionId: string | null) {
       return;
     }
 
+    logger.time('clock_ins', 'Fetch clock-ins');
+
     // Quick count check to avoid JOIN overhead on empty data
     const { count } = await supabase
       .from("clock_ins")
@@ -28,6 +31,7 @@ export function useClockIns(sessionId: string | null) {
       .eq("session_id", sessionId);
 
     if (count === 0) {
+      logger.timeEnd('clock_ins', '0 clock-ins (skipped JOIN)');
       setClockIns([]);
       setLoading(false);
       return;
@@ -51,6 +55,8 @@ export function useClockIns(sessionId: string | null) {
       isActive: ci.clock_out_time === null,
     })) as ClockInWithEmployee[];
 
+    const activeCount = clockInsWithStatus.filter(c => c.isActive).length;
+    logger.timeEnd('clock_ins', `${data?.length || 0} total, ${activeCount} active`);
     setClockIns(clockInsWithStatus);
     setLoading(false);
   }, [supabase, sessionId]);
@@ -61,6 +67,7 @@ export function useClockIns(sessionId: string | null) {
     if (!sessionId) return;
 
     // Subscribe to real-time updates
+    logger.info(`Subscribing to clock_ins realtime for session ${sessionId}`, undefined, 'REALTIME');
     const channel = supabase
       .channel(`clock_ins_${sessionId}`)
       .on(
@@ -71,13 +78,17 @@ export function useClockIns(sessionId: string | null) {
           table: "clock_ins",
           filter: `session_id=eq.${sessionId}`,
         },
-        () => {
+        (payload) => {
+          logger.realtime(payload.eventType, 'clock_ins', payload);
           fetchClockIns();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        logger.info(`Clock-ins subscription status: ${status}`, undefined, 'REALTIME');
+      });
 
     return () => {
+      logger.info(`Unsubscribing from clock_ins realtime`, undefined, 'REALTIME');
       supabase.removeChannel(channel);
     };
   }, [supabase, sessionId, fetchClockIns]);

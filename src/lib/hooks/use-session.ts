@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { DailySession } from "@/lib/types/database";
+import logger from "@/lib/logger";
 
 export function useSession(date: Date) {
   const [session, setSession] = useState<DailySession | null>(null);
@@ -13,6 +14,7 @@ export function useSession(date: Date) {
 
   const fetchOrCreateSession = useCallback(async () => {
     setLoading(true);
+    logger.time(`session_${dateString}`, `Fetch session for ${dateString}`);
 
     // Try to get existing session
     const { data: existingSession } = await supabase
@@ -22,10 +24,13 @@ export function useSession(date: Date) {
       .single();
 
     if (existingSession) {
+      logger.timeEnd(`session_${dateString}`, 'existing session found');
       setSession(existingSession);
       setLoading(false);
       return existingSession;
     }
+
+    logger.info(`Creating new session for ${dateString}`, undefined, 'SESSION');
 
     // Create new session for today
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -36,11 +41,13 @@ export function useSession(date: Date) {
       .single();
 
     if (error) {
-      console.error("Error creating session:", error);
+      logger.error("Error creating session:", error, 'SESSION');
+      logger.timeEnd(`session_${dateString}`, 'failed');
       setLoading(false);
       return null;
     }
 
+    logger.timeEnd(`session_${dateString}`, 'new session created');
     setSession(newSession);
     setLoading(false);
     return newSession;

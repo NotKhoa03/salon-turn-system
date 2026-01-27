@@ -48,6 +48,10 @@ import {
 } from "@/components/ui/tooltip";
 import { ClearDayButton } from "@/components/admin-controls";
 import { SwipeableQueueItem } from "@/components/queue";
+import logger from "@/lib/logger";
+
+// Track page mount time for performance logging
+const pageStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -89,12 +93,14 @@ export default function DashboardPage() {
     loading: clockInsLoading,
     clockIn,
     clockOut,
+    refetch: refetchClockIns,
   } = useClockIns(session?.id || null);
   const {
     turns,
     loading: turnsLoading,
     assignTurn,
     completeTurn,
+    refetch: refetchTurns,
   } = useTurns(session?.id || null);
 
   // Queue logic
@@ -126,6 +132,29 @@ export default function DashboardPage() {
 
   // Undo functionality
   const { recordAction } = useUndo();
+
+  // Callback for when day is cleared - manually refetch data
+  // Real-time subscriptions may not reliably fire for bulk deletes
+  const handleClearDayComplete = useCallback(() => {
+    logger.info('Clear day complete - refetching data', undefined, 'PAGE');
+    refetchClockIns();
+    refetchTurns();
+  }, [refetchClockIns, refetchTurns]);
+
+  // Log when all data has loaded
+  const allDataLoaded = !sessionLoading && !employeesLoading && !servicesLoading && !clockInsLoading && !turnsLoading;
+  useEffect(() => {
+    if (allDataLoaded) {
+      const loadTime = performance.now() - pageStartTime;
+      logger.info(`📊 All data loaded in ${loadTime.toFixed(0)}ms`, {
+        session: !!session,
+        employees: employees.length,
+        services: services.length,
+        clockIns: clockIns.length,
+        turns: turns.length,
+      }, 'PAGE');
+    }
+  }, [allDataLoaded, session, employees.length, services.length, clockIns.length, turns.length]);
 
   // Only show splash screen for first-time visitors during welcome animation
   // Returning visitors see dashboard immediately with loading skeletons
@@ -584,7 +613,10 @@ export default function DashboardPage() {
                       <p className="text-xs text-[#6b6b6b]">
                         Reset all data for the current day. This will delete all turns and clock-ins.
                       </p>
-                      <ClearDayButton sessionId={session?.id || null} />
+                      <ClearDayButton
+                        sessionId={session?.id || null}
+                        onClearComplete={handleClearDayComplete}
+                      />
                     </div>
                   </div>
                 )}

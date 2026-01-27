@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Turn, Employee, Service } from "@/lib/types/database";
+import logger from "@/lib/logger";
 
 export type TurnWithDetails = Turn & {
   employee: Employee;
@@ -24,6 +25,8 @@ export function useTurns(sessionId: string | null) {
       return;
     }
 
+    logger.time('turns', 'Fetch turns');
+
     // First, do a quick count check to avoid heavy JOINs on empty data
     const { count } = await supabase
       .from("turns")
@@ -32,6 +35,7 @@ export function useTurns(sessionId: string | null) {
 
     // If no turns exist, skip the expensive JOIN query
     if (count === 0) {
+      logger.timeEnd('turns', '0 turns (skipped JOIN)');
       setTurns([]);
       setLoading(false);
       return;
@@ -65,6 +69,8 @@ export function useTurns(sessionId: string | null) {
       return t;
     });
 
+    const inProgressCount = turnsWithPairing.filter((t: TurnWithDetails) => t.status === 'in_progress').length;
+    logger.timeEnd('turns', `${data?.length || 0} total, ${inProgressCount} in progress`);
     setTurns(turnsWithPairing);
     setLoading(false);
   }, [supabase, sessionId]);
@@ -75,6 +81,7 @@ export function useTurns(sessionId: string | null) {
     if (!sessionId) return;
 
     // Subscribe to real-time updates
+    logger.info(`Subscribing to turns realtime for session ${sessionId}`, undefined, 'REALTIME');
     const channel = supabase
       .channel(`turns_${sessionId}`)
       .on(
@@ -85,13 +92,17 @@ export function useTurns(sessionId: string | null) {
           table: "turns",
           filter: `session_id=eq.${sessionId}`,
         },
-        () => {
+        (payload) => {
+          logger.realtime(payload.eventType, 'turns', payload);
           fetchTurns();
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        logger.info(`Turns subscription status: ${status}`, undefined, 'REALTIME');
+      });
 
     return () => {
+      logger.info(`Unsubscribing from turns realtime`, undefined, 'REALTIME');
       supabase.removeChannel(channel);
     };
   }, [supabase, sessionId, fetchTurns]);
