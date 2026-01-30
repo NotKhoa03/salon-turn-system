@@ -112,9 +112,39 @@ export function useTurns(sessionId: string | null) {
   const assignTurn = async (
     employeeId: string,
     serviceId: string,
-    isHalfTurn: boolean
+    isHalfTurn: boolean,
+    employee?: Employee,
+    service?: Service
   ) => {
     if (!sessionId) return { error: "No session", turnId: null };
+
+    const tempId = `temp-${Date.now()}`;
+
+    // Calculate optimistic turn number
+    const employeeTurns = turns.filter(t => t.employee_id === employeeId);
+    const optimisticTurnNumber = employeeTurns.length > 0
+      ? Math.max(...employeeTurns.map(t => t.turn_number)) + 1
+      : 1;
+
+    // OPTIMISTIC: Add turn immediately if we have employee and service data
+    if (employee && service) {
+      const optimisticTurn: TurnWithDetails = {
+        id: tempId,
+        session_id: sessionId,
+        employee_id: employeeId,
+        service_id: serviceId,
+        turn_number: optimisticTurnNumber,
+        is_half_turn: isHalfTurn,
+        status: "in_progress",
+        started_at: new Date().toISOString(),
+        completed_at: null,
+        created_at: new Date().toISOString(),
+        employee: employee,
+        service: service,
+        paired_with_turn_id: null,
+      };
+      setTurns(prev => [...prev, optimisticTurn]);
+    }
 
     // Check if employee has a completed half-turn that hasn't been paired yet
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -157,7 +187,7 @@ export function useTurns(sessionId: string | null) {
     } else {
       // Get next turn number for this employee
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: employeeTurns } = await (supabase as any)
+      const { data: dbEmployeeTurns } = await (supabase as any)
         .from("turns")
         .select("turn_number")
         .eq("session_id", sessionId)
@@ -166,7 +196,7 @@ export function useTurns(sessionId: string | null) {
         .limit(1)
         .single() as { data: { turn_number: number } | null };
 
-      turnNumber = (employeeTurns?.turn_number || 0) + 1;
+      turnNumber = (dbEmployeeTurns?.turn_number || 0) + 1;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -180,18 +210,55 @@ export function useTurns(sessionId: string | null) {
       paired_with_turn_id: pairedWithTurnId,
     }).select("id").single();
 
-    return { error, turnId: data?.id || null };
+    if (error) {
+      // Rollback optimistic update
+      if (employee && service) {
+        setTurns(prev => prev.filter(t => t.id !== tempId));
+      }
+      return { error, turnId: null };
+    }
+
+    // Update temp ID with real ID and correct turn number
+    if (employee && service) {
+      setTurns(prev => prev.map(t =>
+        t.id === tempId
+          ? { ...t, id: data.id, turn_number: turnNumber, paired_with_turn_id: pairedWithTurnId }
+          : t
+      ));
+    }
+
+    return { error: null, turnId: data?.id || null };
   };
 
   const completeTurn = async (turnId: string) => {
+    // OPTIMISTIC: Mark as completed immediately
+    const completedAt = new Date().toISOString();
+    const originalTurn = turns.find(t => t.id === turnId);
+
+    setTurns(prev => prev.map(t =>
+      t.id === turnId
+        ? { ...t, status: "completed" as const, completed_at: completedAt }
+        : t
+    ));
+
+    // Send to server
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from("turns")
       .update({
         status: "completed",
-        completed_at: new Date().toISOString(),
+        completed_at: completedAt,
       })
       .eq("id", turnId);
+
+    if (error) {
+      // Rollback optimistic update
+      setTurns(prev => prev.map(t =>
+        t.id === turnId
+          ? { ...t, status: originalTurn?.status || "in_progress", completed_at: originalTurn?.completed_at || null }
+          : t
+      ));
+    }
 
     return { error };
   };

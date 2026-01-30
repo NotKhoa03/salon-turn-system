@@ -95,21 +95,22 @@ export function useClockIns(sessionId: string | null) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, fetchClockIns]);
 
-  const clockIn = async (employeeId: string) => {
+  const clockIn = async (employeeId: string, employee?: Employee) => {
     if (!sessionId) return { error: "No session", clockInId: null, wasReactivation: false, previousClockOutTime: null };
 
-    // Check if employee already has a clock-in record for this session
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data: existingClockIn } = await (supabase as any)
-      .from("clock_ins")
-      .select("id, clock_out_time, position")
-      .eq("session_id", sessionId)
-      .eq("employee_id", employeeId)
-      .single() as { data: { id: string; clock_out_time: string | null; position: number } | null };
+    // Check if this is a reactivation (employee already clocked in before)
+    const existingRecord = clockIns.find(c => c.employee_id === employeeId);
 
-    if (existingClockIn) {
-      // Re-activate: clear clock_out_time and update position
-      // Position should be after all currently active workers
+    if (existingRecord && !existingRecord.isActive) {
+      // OPTIMISTIC: Reactivate - set isActive immediately
+      const optimisticPosition = Math.max(...clockIns.filter(c => c.isActive).map(c => c.position), 0) + 1;
+      setClockIns(prev => prev.map(c =>
+        c.employee_id === employeeId
+          ? { ...c, isActive: true, clock_out_time: null, position: optimisticPosition }
+          : c
+      ));
+
+      // Send to server
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: maxActivePosition } = await (supabase as any)
         .from("clock_ins")
@@ -121,7 +122,7 @@ export function useClockIns(sessionId: string | null) {
         .single() as { data: { position: number } | null };
 
       const newPosition = (maxActivePosition?.position || 0) + 1;
-      const previousClockOutTime = existingClockIn.clock_out_time;
+      const previousClockOutTime = existingRecord.clock_out_time;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
@@ -130,17 +131,46 @@ export function useClockIns(sessionId: string | null) {
           clock_out_time: null,
           position: newPosition
         })
-        .eq("id", existingClockIn.id);
+        .eq("id", existingRecord.id);
+
+      if (error) {
+        // Rollback optimistic update
+        setClockIns(prev => prev.map(c =>
+          c.employee_id === employeeId
+            ? { ...c, isActive: false, clock_out_time: previousClockOutTime, position: existingRecord.position }
+            : c
+        ));
+        return { error, clockInId: null, wasReactivation: true, previousClockOutTime };
+      }
 
       return {
-        error,
-        clockInId: existingClockIn.id,
+        error: null,
+        clockInId: existingRecord.id,
         wasReactivation: true,
         previousClockOutTime
       };
     }
 
-    // New clock-in: get next position
+    // New clock-in
+    const tempId = `temp-${Date.now()}`;
+    const optimisticPosition = Math.max(...clockIns.map(c => c.position), 0) + 1;
+
+    // OPTIMISTIC: Add new clock-in immediately if we have employee data
+    if (employee) {
+      const optimisticClockIn: ClockInWithEmployee = {
+        id: tempId,
+        session_id: sessionId,
+        employee_id: employeeId,
+        clock_in_time: new Date().toISOString(),
+        clock_out_time: null,
+        position: optimisticPosition,
+        employee: employee,
+        isActive: true,
+      };
+      setClockIns(prev => [...prev, optimisticClockIn]);
+    }
+
+    // Send to server
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: maxPosition } = await (supabase as any)
       .from("clock_ins")
@@ -159,8 +189,23 @@ export function useClockIns(sessionId: string | null) {
       position: nextPosition,
     }).select("id").single();
 
+    if (error) {
+      // Rollback optimistic update
+      if (employee) {
+        setClockIns(prev => prev.filter(c => c.id !== tempId));
+      }
+      return { error, clockInId: null, wasReactivation: false, previousClockOutTime: null };
+    }
+
+    // Update temp ID with real ID (realtime will sync the rest)
+    if (employee) {
+      setClockIns(prev => prev.map(c =>
+        c.id === tempId ? { ...c, id: data.id, position: nextPosition } : c
+      ));
+    }
+
     return {
-      error,
+      error: null,
       clockInId: data?.id || null,
       wasReactivation: false,
       previousClockOutTime: null
@@ -168,11 +213,31 @@ export function useClockIns(sessionId: string | null) {
   };
 
   const clockOut = async (clockInId: string) => {
+    // OPTIMISTIC: Set isActive to false immediately
+    const clockInRecord = clockIns.find(c => c.id === clockInId);
+    const clockOutTime = new Date().toISOString();
+
+    setClockIns(prev => prev.map(c =>
+      c.id === clockInId
+        ? { ...c, isActive: false, clock_out_time: clockOutTime }
+        : c
+    ));
+
+    // Send to server
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any)
       .from("clock_ins")
-      .update({ clock_out_time: new Date().toISOString() })
+      .update({ clock_out_time: clockOutTime })
       .eq("id", clockInId);
+
+    if (error) {
+      // Rollback optimistic update
+      setClockIns(prev => prev.map(c =>
+        c.id === clockInId
+          ? { ...c, isActive: true, clock_out_time: clockInRecord?.clock_out_time || null }
+          : c
+      ));
+    }
 
     return { error, clockInId };
   };
