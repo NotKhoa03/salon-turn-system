@@ -90,7 +90,8 @@ export function useUndo() {
 
       return { error: null };
     },
-    [supabase]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   // Undo turn completion (set back to in_progress)
@@ -112,7 +113,8 @@ export function useUndo() {
 
       return { error: null };
     },
-    [supabase]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   // Undo clock-in (clock out the employee)
@@ -146,7 +148,8 @@ export function useUndo() {
 
       return { error: null };
     },
-    [supabase]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   // Undo clock-out (clock back in - clear clock_out_time)
@@ -165,7 +168,8 @@ export function useUndo() {
 
       return { error: null };
     },
-    [supabase]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
   );
 
   // Perform undo for a specific action (uses ref to avoid stale closure)

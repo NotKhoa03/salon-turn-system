@@ -73,7 +73,8 @@ export function useTurns(sessionId: string | null) {
     logger.timeEnd('turns', `${data?.length || 0} total, ${inProgressCount} in progress`);
     setTurns(turnsWithPairing);
     setLoading(false);
-  }, [supabase, sessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   useEffect(() => {
     fetchTurns();
@@ -105,7 +106,8 @@ export function useTurns(sessionId: string | null) {
       logger.info(`Unsubscribing from turns realtime`, undefined, 'REALTIME');
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId, fetchTurns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, fetchTurns]);
 
   const assignTurn = async (
     employeeId: string,

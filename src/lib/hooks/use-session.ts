@@ -51,7 +51,8 @@ export function useSession(date: Date) {
     setSession(newSession);
     setLoading(false);
     return newSession;
-  }, [supabase, dateString]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateString]);
 
   useEffect(() => {
     fetchOrCreateSession();

@@ -59,7 +59,8 @@ export function useClockIns(sessionId: string | null) {
     logger.timeEnd('clock_ins', `${data?.length || 0} total, ${activeCount} active`);
     setClockIns(clockInsWithStatus);
     setLoading(false);
-  }, [supabase, sessionId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
 
   useEffect(() => {
     fetchClockIns();
@@ -91,7 +92,8 @@ export function useClockIns(sessionId: string | null) {
       logger.info(`Unsubscribing from clock_ins realtime`, undefined, 'REALTIME');
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId, fetchClockIns]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, fetchClockIns]);
 
   const clockIn = async (employeeId: string) => {
     if (!sessionId) return { error: "No session", clockInId: null, wasReactivation: false, previousClockOutTime: null };

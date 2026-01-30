@@ -26,7 +26,8 @@ export function useEmployees() {
     };
 
     fetchEmployees();
-  }, [supabase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { employees, loading };
 }

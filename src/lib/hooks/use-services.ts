@@ -26,7 +26,8 @@ export function useServices() {
     };
 
     fetchServices();
-  }, [supabase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return { services, loading };
 }
