@@ -59,12 +59,27 @@ function clearStoredHistory(sessionId: string | null): void {
   }
 }
 
-export function useUndo(sessionId: string | null = null) {
+interface UseUndoOptions {
+  sessionId: string | null;
+  onUndoComplete?: () => void; // Called after successful undo to refresh UI
+}
+
+export function useUndo(options: UseUndoOptions | string | null = null) {
+  // Support both old signature (just sessionId) and new signature (options object)
+  const sessionId = typeof options === 'object' && options !== null ? options.sessionId : options;
+  const onUndoComplete = typeof options === 'object' && options !== null ? options.onUndoComplete : undefined;
+
   const [history, setHistory] = useState<UndoAction[]>([]);
   const [isLoading, setIsLoading] = useState<string | null>(null); // Action ID being undone
   const historyRef = useRef<UndoAction[]>([]);
   const supabase = createClient();
   const sessionIdRef = useRef(sessionId);
+  const onUndoCompleteRef = useRef(onUndoComplete);
+
+  // Keep callback ref updated
+  useEffect(() => {
+    onUndoCompleteRef.current = onUndoComplete;
+  }, [onUndoComplete]);
 
   // Load history from localStorage on mount and when session changes
   useEffect(() => {
@@ -274,6 +289,12 @@ export function useUndo(sessionId: string | null = null) {
         toast.success(`Undone: ${action.description}`);
         removeAction(actionId);
         setIsLoading(null);
+
+        // Trigger UI refresh after successful undo
+        if (onUndoCompleteRef.current) {
+          onUndoCompleteRef.current();
+        }
+
         return { success: true };
       } catch {
         toast.error("Failed to undo action");

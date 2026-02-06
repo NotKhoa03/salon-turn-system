@@ -124,8 +124,16 @@ export default function DashboardClient({ employees: initialEmployees, services 
     });
   }, [queue, isSkipped]);
 
-  // Undo functionality
-  const { recordAction, history, performUndo, isLoading } = useUndo(session?.id || null);
+  // Undo functionality - refresh data after undo
+  const handleUndoComplete = useCallback(() => {
+    refetchClockIns();
+    refetchTurns();
+  }, [refetchClockIns, refetchTurns]);
+
+  const { recordAction, history, performUndo, isLoading } = useUndo({
+    sessionId: session?.id || null,
+    onUndoComplete: handleUndoComplete,
+  });
 
   // Callback for when day is cleared
   const handleClearDayComplete = useCallback(() => {
