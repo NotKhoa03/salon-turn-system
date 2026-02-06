@@ -12,6 +12,7 @@ import {
   useAuth,
   useUndo,
   useSkip,
+  useEmployees,
 } from "@/lib/hooks";
 import type { Service, Employee } from "@/lib/types/database";
 import {
@@ -44,17 +45,21 @@ import {
 } from "@/components/ui/tooltip";
 import { ClearDayButton } from "@/components/admin-controls";
 import { SwipeableQueueItem } from "@/components/queue";
+import { UndoButton } from "@/components/undo-button";
 import logger from "@/lib/logger";
 
 // Track page mount time for performance logging
 const pageStartTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
 
 interface DashboardClientProps {
-  employees: Employee[];
+  employees: Employee[]; // Initial server-cached employees
   services: Service[];
 }
 
-export default function DashboardClient({ employees, services }: DashboardClientProps) {
+export default function DashboardClient({ employees: initialEmployees, services }: DashboardClientProps) {
+  // Use real-time employees hook, falling back to server-cached data initially
+  const { employees: liveEmployees, loading: employeesLoading } = useEmployees();
+  const employees = liveEmployees.length > 0 ? liveEmployees : initialEmployees;
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [manualAssignOpen, setManualAssignOpen] = useState(false);
   const [manualEmployeeId, setManualEmployeeId] = useState<string>("");
@@ -120,7 +125,7 @@ export default function DashboardClient({ employees, services }: DashboardClient
   }, [queue, isSkipped]);
 
   // Undo functionality
-  const { recordAction } = useUndo();
+  const { recordAction, history, performUndo, isLoading } = useUndo(session?.id || null);
 
   // Callback for when day is cleared
   const handleClearDayComplete = useCallback(() => {
@@ -130,7 +135,7 @@ export default function DashboardClient({ employees, services }: DashboardClient
   }, [refetchClockIns, refetchTurns]);
 
   // Log when all data has loaded
-  const allDataLoaded = !sessionLoading && !clockInsLoading && !turnsLoading;
+  const allDataLoaded = !sessionLoading && !clockInsLoading && !turnsLoading && !employeesLoading;
   useEffect(() => {
     if (allDataLoaded) {
       const loadTime = performance.now() - pageStartTime;
@@ -169,6 +174,7 @@ export default function DashboardClient({ employees, services }: DashboardClient
         clockInId: result.clockInId,
         wasReactivation: result.wasReactivation,
         previousClockOutTime: result.previousClockOutTime,
+        employeeId: employeeId,
         employeeName: emp?.full_name,
       });
     }
@@ -684,6 +690,13 @@ export default function DashboardClient({ employees, services }: DashboardClient
               boxShadow: '0 4px 20px rgba(183, 110, 121, 0.1)',
             },
           }}
+        />
+
+        {/* Floating Undo Button */}
+        <UndoButton
+          history={history}
+          onUndo={performUndo}
+          isLoading={isLoading}
         />
       </div>
     </TooltipProvider>

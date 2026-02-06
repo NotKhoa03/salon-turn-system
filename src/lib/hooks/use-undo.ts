@@ -16,42 +16,77 @@ export interface UndoAction {
   description: string;
   timestamp: number;
   data: Record<string, unknown>;
-  toastId?: string | number;
 }
 
-const UNDO_TIMEOUT = 30000; // 30 seconds
-const MAX_HISTORY = 5;
+const STORAGE_KEY_PREFIX = "undo_history_";
 
-export function useUndo() {
+// Get storage key for a session
+function getStorageKey(sessionId: string | null): string {
+  return `${STORAGE_KEY_PREFIX}${sessionId || "no_session"}`;
+}
+
+// Load history from localStorage
+function loadHistory(sessionId: string | null): UndoAction[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const stored = localStorage.getItem(getStorageKey(sessionId));
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch {
+    // Ignore parse errors
+  }
+  return [];
+}
+
+// Save history to localStorage
+function saveHistory(sessionId: string | null, history: UndoAction[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(getStorageKey(sessionId), JSON.stringify(history));
+  } catch {
+    // Ignore storage errors
+  }
+}
+
+// Clear history from localStorage
+function clearStoredHistory(sessionId: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(getStorageKey(sessionId));
+  } catch {
+    // Ignore errors
+  }
+}
+
+export function useUndo(sessionId: string | null = null) {
   const [history, setHistory] = useState<UndoAction[]>([]);
+  const [isLoading, setIsLoading] = useState<string | null>(null); // Action ID being undone
   const historyRef = useRef<UndoAction[]>([]);
   const supabase = createClient();
-  const timeoutsRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
+  const sessionIdRef = useRef(sessionId);
 
-  // Keep historyRef in sync
+  // Load history from localStorage on mount and when session changes
+  useEffect(() => {
+    const loaded = loadHistory(sessionId);
+    setHistory(loaded);
+    sessionIdRef.current = sessionId;
+  }, [sessionId]);
+
+  // Keep historyRef in sync and persist to localStorage
   useEffect(() => {
     historyRef.current = history;
+    if (sessionIdRef.current !== null) {
+      saveHistory(sessionIdRef.current, history);
+    }
   }, [history]);
 
-  // Cleanup timeouts on unmount
-  useEffect(() => {
-    return () => {
-      timeoutsRef.current.forEach((timeout) => clearTimeout(timeout));
-      timeoutsRef.current.clear();
-    };
-  }, []);
-
-  // Remove expired actions
+  // Remove an action from history
   const removeAction = useCallback((actionId: string) => {
     setHistory((prev) => prev.filter((a) => a.id !== actionId));
-    const timeout = timeoutsRef.current.get(actionId);
-    if (timeout) {
-      clearTimeout(timeout);
-      timeoutsRef.current.delete(actionId);
-    }
   }, []);
 
-  // Add action to history with auto-expiry
+  // Add action to history (no timeout, no limit)
   const addAction = useCallback(
     (action: Omit<UndoAction, "id" | "timestamp">) => {
       const id = crypto.randomUUID();
@@ -61,20 +96,36 @@ export function useUndo() {
         timestamp: Date.now(),
       };
 
-      setHistory((prev) => {
-        const updated = [newAction, ...prev].slice(0, MAX_HISTORY);
-        return updated;
-      });
-
-      // Set timeout for auto-removal
-      const timeout = setTimeout(() => {
-        removeAction(id);
-      }, UNDO_TIMEOUT);
-      timeoutsRef.current.set(id, timeout);
+      setHistory((prev) => [newAction, ...prev]);
 
       return id;
     },
-    [removeAction]
+    []
+  );
+
+  // Clear all history (called when session changes)
+  const clearHistory = useCallback(() => {
+    setHistory([]);
+    clearStoredHistory(sessionIdRef.current);
+  }, []);
+
+  // Check if an employee has active turns (for clock-in dependency)
+  const checkClockInDependencies = useCallback(
+    async (employeeId: string): Promise<{ hasTurns: boolean; turnCount: number }> => {
+      if (!sessionIdRef.current) return { hasTurns: false, turnCount: 0 };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("turns")
+        .select("id")
+        .eq("session_id", sessionIdRef.current)
+        .eq("employee_id", employeeId)
+        .eq("status", "in_progress");
+
+      if (error) return { hasTurns: false, turnCount: 0 };
+      return { hasTurns: data.length > 0, turnCount: data.length };
+    },
+    []
   );
 
   // Undo turn assignment (delete the turn)
@@ -84,8 +135,7 @@ export function useUndo() {
       const { error } = await (supabase as any).from("turns").delete().eq("id", turnId);
 
       if (error) {
-        toast.error("Failed to undo turn assignment");
-        return { error };
+        return { error, message: "Failed to undo turn assignment" };
       }
 
       return { error: null };
@@ -107,8 +157,7 @@ export function useUndo() {
         .eq("id", turnId);
 
       if (error) {
-        toast.error("Failed to undo turn completion");
-        return { error };
+        return { error, message: "Failed to undo turn completion" };
       }
 
       return { error: null };
@@ -119,7 +168,16 @@ export function useUndo() {
 
   // Undo clock-in (clock out the employee)
   const undoClockIn = useCallback(
-    async (clockInId: string, wasReactivation: boolean, previousClockOutTime: string | null) => {
+    async (clockInId: string, wasReactivation: boolean, previousClockOutTime: string | null, employeeId: string) => {
+      // Check for active turns first
+      const { hasTurns, turnCount } = await checkClockInDependencies(employeeId);
+      if (hasTurns) {
+        return {
+          error: "DEPENDENCY_ERROR",
+          message: `Can't undo clock-in — employee has ${turnCount} active turn${turnCount > 1 ? 's' : ''}. Undo those first.`
+        };
+      }
+
       if (wasReactivation && previousClockOutTime) {
         // If it was a reactivation, restore the previous clock_out_time
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -129,8 +187,7 @@ export function useUndo() {
           .eq("id", clockInId);
 
         if (error) {
-          toast.error("Failed to undo clock-in");
-          return { error };
+          return { error, message: "Failed to undo clock-in" };
         }
       } else {
         // If it was a new clock-in, delete the record
@@ -141,15 +198,14 @@ export function useUndo() {
           .eq("id", clockInId);
 
         if (error) {
-          toast.error("Failed to undo clock-in");
-          return { error };
+          return { error, message: "Failed to undo clock-in" };
         }
       }
 
       return { error: null };
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    []
+    [checkClockInDependencies]
   );
 
   // Undo clock-out (clock back in - clear clock_out_time)
@@ -162,8 +218,7 @@ export function useUndo() {
         .eq("id", clockInId);
 
       if (error) {
-        toast.error("Failed to undo clock-out");
-        return { error };
+        return { error, message: "Failed to undo clock-out" };
       }
 
       return { error: null };
@@ -178,67 +233,58 @@ export function useUndo() {
       const action = historyRef.current.find((a) => a.id === actionId);
       if (!action) {
         toast.error("Action no longer available");
-        return;
+        return { success: false };
       }
 
-      let result: { error: unknown };
+      setIsLoading(actionId);
 
-      switch (action.type) {
-        case "assign_turn":
-          result = await undoAssignTurn(action.data.turnId as string);
-          break;
-        case "complete_turn":
-          result = await undoCompleteTurn(action.data.turnId as string);
-          break;
-        case "clock_in":
-          result = await undoClockIn(
-            action.data.clockInId as string,
-            action.data.wasReactivation as boolean,
-            action.data.previousClockOutTime as string | null
-          );
-          break;
-        case "clock_out":
-          result = await undoClockOut(action.data.clockInId as string);
-          break;
-        default:
-          toast.error("Unknown action type");
-          return;
-      }
+      let result: { error: unknown; message?: string };
 
-      if (!result.error) {
-        // Dismiss the original toast if it exists
-        if (action.toastId) {
-          toast.dismiss(action.toastId);
+      try {
+        switch (action.type) {
+          case "assign_turn":
+            result = await undoAssignTurn(action.data.turnId as string);
+            break;
+          case "complete_turn":
+            result = await undoCompleteTurn(action.data.turnId as string);
+            break;
+          case "clock_in":
+            result = await undoClockIn(
+              action.data.clockInId as string,
+              action.data.wasReactivation as boolean,
+              action.data.previousClockOutTime as string | null,
+              action.data.employeeId as string
+            );
+            break;
+          case "clock_out":
+            result = await undoClockOut(action.data.clockInId as string);
+            break;
+          default:
+            toast.error("Unknown action type");
+            setIsLoading(null);
+            return { success: false };
         }
-        toast.success("Action undone");
+
+        if (result.error) {
+          toast.error(result.message || "Failed to undo action");
+          setIsLoading(null);
+          return { success: false, blocked: result.error === "DEPENDENCY_ERROR" };
+        }
+
+        toast.success(`Undone: ${action.description}`);
         removeAction(actionId);
+        setIsLoading(null);
+        return { success: true };
+      } catch {
+        toast.error("Failed to undo action");
+        setIsLoading(null);
+        return { success: false };
       }
     },
     [undoAssignTurn, undoCompleteTurn, undoClockIn, undoClockOut, removeAction]
   );
 
-  // Show toast with undo button
-  const showUndoToast = useCallback(
-    (actionId: string, message: string) => {
-      const toastId = toast.success(message, {
-        duration: UNDO_TIMEOUT,
-        action: {
-          label: "Undo",
-          onClick: () => performUndo(actionId),
-        },
-      });
-
-      // Update the action with the toast ID
-      setHistory((prev) =>
-        prev.map((a) => (a.id === actionId ? { ...a, toastId } : a))
-      );
-
-      return toastId;
-    },
-    [performUndo]
-  );
-
-  // Record action and show undo toast in one call
+  // Record action (simplified - no toast with undo button)
   const recordAction = useCallback(
     (
       type: UndoActionType,
@@ -246,10 +292,11 @@ export function useUndo() {
       data: Record<string, unknown>
     ) => {
       const actionId = addAction({ type, description, data });
-      showUndoToast(actionId, description);
+      // Show simple success toast without undo button (undo is in floating button now)
+      toast.success(description);
       return actionId;
     },
-    [addAction, showUndoToast]
+    [addAction]
   );
 
   return {
@@ -257,6 +304,9 @@ export function useUndo() {
     recordAction,
     performUndo,
     removeAction,
+    clearHistory,
     canUndo: history.length > 0,
+    isLoading,
+    actionCount: history.length,
   };
 }
